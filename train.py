@@ -2,9 +2,12 @@ import csv
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
+import click
+import sys
 
-from keras.models import Sequential
-from keras.layers import Flatten, Dense, Lambda, Cropping2D
+from keras.models import Sequential, load_model
+from keras.layers import Flatten, Dense, Lambda, Cropping2D, Activation
+from keras.layers.convolutional import Convolution2D
 
 from sklearn.model_selection import train_test_split
 from sklearn.utils import shuffle
@@ -60,6 +63,14 @@ def read_training_data_from_log_line(line):
     images.append(image)
     steerings.append(steering)
 
+    # center image flipped
+    image = cv2.imread(center_image_path)
+    image = np.fliplr(image)
+    image = process_image(image)
+    steering = -float(line[3])
+    images.append(image)
+    steerings.append(steering)
+
     # left image
     image = cv2.imread(left_image_path)
     image = process_image(image)
@@ -92,8 +103,69 @@ def read_validation_data_from_log_line(line):
     return images, steerings
 
 
-if __name__ == "__main__":
-    log_lines = read_driving_log('data_1/driving_log.csv')
+def create_model():
+    model = Sequential()
+
+    model.add(Lambda(lambda x: x / 255.0 - 0.5, input_shape=(160, 320, 3)))
+    print(model.output_shape)
+
+    model.add(Cropping2D(cropping=((70, 25), (0, 0))))
+    print(model.output_shape)
+
+    model.add(Convolution2D(24, 5, 5, subsample=(2, 2)))
+    print(model.output_shape)
+
+    model.add(Convolution2D(36, 5, 5, subsample=(2, 2)))
+    print(model.output_shape)
+
+    model.add(Convolution2D(48, 5, 5, subsample=(2, 2)))
+    print(model.output_shape)
+
+    model.add(Convolution2D(64, 3, 3))
+    print(model.output_shape)
+
+    model.add(Convolution2D(64, 3, 3))
+    print(model.output_shape)
+
+    model.add(Flatten())
+    print(model.output_shape)
+
+    model.add(Dense(500))
+    print(model.output_shape)
+
+    model.add(Dense(100))
+    print(model.output_shape)
+
+    model.add(Dense(50))
+    print(model.output_shape)
+
+    model.add(Dense(10))
+    print(model.output_shape)
+
+    model.add(Dense(1))
+    print(model.output_shape)
+
+    model.compile(loss='mse', optimizer='adam')
+
+    return model
+
+
+@click.command()
+@click.option('--model_file_input_path', help='File path of the Model which this training will be based on')
+@click.option('--model_file_output_path', help='File path of the output model')
+@click.option('--driving_log_csv_file_path', help='File path to driving_log.csv')
+def train(model_file_input_path, model_file_output_path, driving_log_csv_file_path):
+    if not model_file_output_path:
+        sys.exit('Missing model_file_output_path. Use --help')
+    if not driving_log_csv_file_path:
+        sys.exit('Missing driver_log_csv_file_path. Use --help')
+
+    if model_file_input_path:
+        model = load_model(model_file_input_path)
+    else:
+        model = create_model()
+
+    log_lines = read_driving_log(driving_log_csv_file_path)
     training_log_lines, validation_log_lines = train_test_split(log_lines, test_size=0.2)
 
     training_data_generator = data_generator(training_log_lines, BATCH_SIZE,
@@ -101,29 +173,14 @@ if __name__ == "__main__":
     validation_data_generator = data_generator(validation_log_lines, BATCH_SIZE,
                                                read_validation_data_from_log_line)
 
-    # for batch in training_data_generator:
-    #     print(batch[0].shape)
-    #     print(batch[1].shape)
-    #     print("")
-    #     pass
-
-    # for batch in validation_generator:
-    #     if batch is None:
-    #         print("SHIT")
-
-    model = Sequential()
-    model.add(Lambda(lambda x: x / 255.0 - 0.5, input_shape=(160, 320, 3)))
-    print(model.output_shape)
-    model.add(Cropping2D(cropping=((70, 25), (0, 0))))
-    print(model.output_shape)
-    model.add(Flatten())
-    print(model.output_shape)
-    model.add(Dense(1))
-    print(model.output_shape)
-
-    model.compile(loss='mse', optimizer='adam')
-    model.fit_generator(training_data_generator, len(training_log_lines) * 3, nb_epoch=EPOCH_COUNT,
+    model.fit_generator(training_data_generator, len(training_log_lines) * 4, nb_epoch=EPOCH_COUNT,
                         validation_data=validation_data_generator,
                         nb_val_samples=len(validation_log_lines))
 
-    model.save('model.h5')
+    model.save(model_file_output_path)
+
+
+if __name__ == "__main__":
+    train()
+
+
