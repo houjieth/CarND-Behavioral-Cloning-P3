@@ -15,6 +15,8 @@ from sklearn.utils import shuffle
 
 BATCH_SIZE = 64
 EPOCH_COUNT = 5
+CAMERA_STEERING_CORRECTION = 0.25 # TODO: need to bigger than 0.25, maybe 0.5 or bigger
+# TODO: 多训练下急转右湾的case
 
 
 def process_image(image):
@@ -74,14 +76,14 @@ def read_training_data_from_log_line(line):
     # left image
     image = cv2.imread(left_image_path)
     image = process_image(image)
-    steering = float(line[3]) + 1
+    steering = float(line[3]) + CAMERA_STEERING_CORRECTION
     images.append(image)
     steerings.append(steering)
 
     # right image
     image = cv2.imread(right_image_path)
     image = process_image(image)
-    steering = float(line[3]) - 1
+    steering = float(line[3]) - CAMERA_STEERING_CORRECTION
     images.append(image)
     steerings.append(steering)
 
